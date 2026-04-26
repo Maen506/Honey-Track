@@ -11,11 +11,18 @@ logger = logging.getLogger(__name__)
 def setup_database():
     """Create database and tables"""
     
-    conn = mysql.connector.connect(
-        host='localhost',
-        user='root',
-        password=''
-    )
+    import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+conn = mysql.connector.connect(
+    host=os.getenv('DB_HOST', 'localhost'),
+    port=int(os.getenv('DB_PORT', 3306)),
+    user=os.getenv('DB_USER', 'root'),
+    password=os.getenv('DB_PASSWORD', ''),
+    charset='utf8mb4'
+)
     
     cursor = conn.cursor()
     
