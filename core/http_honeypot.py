@@ -1,132 +1,133 @@
 """
-HoneyTrack - SSH Honeypot
---------------------------
-Emulates an SSH server on port 2222.
-Captures brute-force attempts and commands.
+HoneyTrack - HTTP Honeypot
+---------------------------
+Emulates a vulnerable web server on port 8080.
+Detects SQLi, XSS, path traversal, scanners.
 Pushes events to the shared queue.
 """
 
 import socket
 import threading
-import paramiko
 import logging
 import json
-import os
-from datetime import datetime
+import re
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
+from datetime import datetime
 
 from core.event_queue import push
 
 # ── Logging ───────────────────────────────────
 LOG_DIR = Path(__file__).parent.parent / "logs"
-LOG_DIR.mkdir(exist_ok=True)
-
-logger = logging.getLogger("ssh_honeypot")
+logger = logging.getLogger("http_honeypot")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
-    h = RotatingFileHandler(LOG_DIR / "ssh.log", maxBytes=5*1024*1024, backupCount=3)
+    h = RotatingFileHandler(LOG_DIR / "http.log", maxBytes=5*1024*1024, backupCount=3)
     h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
     logger.addHandler(h)
 
-# ── Host Key ──────────────────────────────────
-KEY_PATH = Path(__file__).parent / "host.key"
+# ── Attack Pattern Detection ──────────────────
+PATTERNS = {
+    "sql_injection":   [r"union.*select", r"' or '", r"1=1", r"drop table", r"insert into"],
+    "path_traversal":  [r"\.\./", r"etc/passwd", r"win/system32"],
+    "xss":             [r"<script", r"javascript:", r"onerror=", r"onload="],
+    "cmd_injection":   [r"cmd=", r"exec\(", r";ls", r"&&cat", r"\|whoami"],
+    "scanner":         [r"/wp-admin", r"/phpmyadmin", r"/.env", r"/config", r"/.git"],
+    "webshell":        [r"/shell", r"base64_decode", r"eval\(", r"system\("],
+}
 
-def _get_host_key():
-    if not KEY_PATH.exists():
-        paramiko.RSAKey.generate(2048).write_private_key_file(str(KEY_PATH))
-    return paramiko.RSAKey(filename=str(KEY_PATH))
+def _detect(text: str) -> dict:
+    text = text.lower()
+    found = {}
+    for category, rules in PATTERNS.items():
+        hits = [r for r in rules if re.search(r, text, re.I)]
+        if hits:
+            found[category] = hits
+    return found
 
+# ── Fake Responses ────────────────────────────
+def _fake_response(path: str, method: str) -> bytes:
+    if any(x in path.lower() for x in ["admin", "login", "wp-admin"]):
+        body = b"<html><body><h2>Admin Panel</h2><form method='POST'><input name='user'><input type='password' name='pass'><button>Login</button></form></body></html>"
+        return b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + body
+    elif any(x in path.lower() for x in ["passwd", ".env", "config"]):
+        return b"HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\n\r\n<h1>403 Forbidden</h1>"
+    else:
+        return b"HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<h1>404 Not Found</h1>"
 
-# ── Fake SSH Server ───────────────────────────
-class _FakeSSH(paramiko.ServerInterface):
-    def __init__(self, ip):
-        self.ip = ip
-        self.event = threading.Event()
-
-    def check_channel_request(self, kind, chanid):
-        return paramiko.OPEN_SUCCEEDED if kind == "session" else paramiko.OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED
-
-    def check_auth_password(self, username, password):
-        event = {
-            "type":     "ssh_auth",
-            "src_ip":   self.ip,
-            "username": username,
-            "password": password,
-        }
-        push(event)
-        logger.info(json.dumps(event))
-        print(f"  [SSH] {self.ip}  {username}:{password}")
-        return paramiko.AUTH_FAILED
-
-    def check_channel_shell_request(self, channel):
-        self.event.set()
-        return True
-
-    def check_channel_pty_request(self, channel, term, w, h, pw, ph, modes):
-        return True
-
-    def get_allowed_auths(self, username):
-        return "password"
-
+# ── Parse HTTP Request ────────────────────────
+def _parse(raw: bytes):
+    try:
+        text   = raw.decode(errors="ignore")
+        lines  = text.split("\r\n")
+        parts  = lines[0].split(" ") if lines else []
+        method = parts[0] if len(parts) > 0 else "UNKNOWN"
+        path   = parts[1] if len(parts) > 1 else "/"
+        headers = {}
+        i = 1
+        while i < len(lines) and lines[i]:
+            if ":" in lines[i]:
+                k, v = lines[i].split(":", 1)
+                headers[k.strip().lower()] = v.strip()
+            i += 1
+        body = "\r\n".join(lines[i+1:]) if i < len(lines) else ""
+        return method, path, headers, body
+    except Exception:
+        return "UNKNOWN", "/", {}, ""
 
 # ── Client Handler ────────────────────────────
 def _handle(sock, ip):
-    transport = None
     try:
-        transport = paramiko.Transport(sock)
-        transport.add_server_key(_get_host_key())
-        server = _FakeSSH(ip)
-        transport.start_server(server=server)
+        sock.settimeout(10)
+        raw = b""
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            raw += chunk
+            if b"\r\n\r\n" in raw:
+                break
 
-        chan = transport.accept(20)
-        if not chan:
+        if not raw:
             return
 
-        chan.send(b"\r\nUbuntu 22.04.2 LTS\r\n$ ")
-        buf = b""
-        chan.settimeout(15)
-        commands = []
+        method, path, headers, body = _parse(raw)
+        full_text = f"{method} {path} {body}"
+        attack_patterns = _detect(full_text)
+        is_attack = len(attack_patterns) > 0
 
-        try:
-            while True:
-                data = chan.recv(1024)
-                if not data:
-                    break
-                buf += data
-                chan.send(data)
-                if b"\n" in buf or b"\r" in buf:
-                    cmd = buf.strip().decode(errors="ignore")
-                    if cmd:
-                        commands.append(cmd)
-                        event = {"type": "ssh_command", "src_ip": ip, "command": cmd}
-                        push(event)
-                        print(f"  [SSH CMD] {ip}: {cmd}")
-                        chan.send(b"\r\ncommand not found\r\n$ ")
-                    buf = b""
-        except Exception:
-            pass
+        event = {
+            "type":             "http_request",
+            "src_ip":           ip,
+            "method":           method,
+            "path":             path,
+            "user_agent":       headers.get("user-agent", "unknown"),
+            "attack_patterns":  attack_patterns,
+            "is_attack":        is_attack,
+            "body_snippet":     body[:300],
+        }
+        push(event)
+        logger.info(json.dumps(event))
 
-        if commands:
-            push({"type": "ssh_session_end", "src_ip": ip,
-                  "commands": commands, "count": len(commands)})
-        chan.close()
+        if is_attack:
+            print(f"  [HTTP ATTACK] {ip} {method} {path} → {list(attack_patterns.keys())}")
+        else:
+            print(f"  [HTTP] {ip} {method} {path}")
 
-    except Exception as e:
+        sock.send(_fake_response(path, method))
+
+    except Exception:
         pass
     finally:
-        if transport:
-            transport.close()
         sock.close()
 
-
 # ── Main Listener ─────────────────────────────
-def start(host="0.0.0.0", port=2222):
+def start(host="0.0.0.0", port=8080):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
     srv.listen(100)
-    print(f"  [SSH] Listening on {host}:{port}")
+    print(f"  [HTTP] Listening on {host}:{port}")
 
     while True:
         try:
