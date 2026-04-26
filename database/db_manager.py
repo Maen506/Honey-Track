@@ -265,7 +265,53 @@ def log_credential_attempt(attacker_id: int, username: str,
             VALUES (%s,%s,%s,%s)
         """, (attacker_id, username, password, protocol))
 
+def execute(self, query: str, params: tuple = ()) -> bool:
+    """Execute query with connection check"""
+    if not self.connection:
+        logger.error("Database not connected - cannot execute query")
+        return False
+    
+    try:
+        cursor = self.connection.cursor()
+        cursor.execute(query, params)
+        self.connection.commit()
+        cursor.close()
+        return True
+    except Exception as e:
+        logger.error(f"Query execution failed: {e}")
+        return False
 
+def fetch_one(self, query: str, params: tuple = ()) -> Optional[tuple]:
+    """Fetch one row with connection check"""
+    if not self.connection:
+        logger.error("Database not connected - cannot fetch")
+        return None
+    
+    try:
+        cursor = self.connection.cursor()
+        cursor.execute(query, params)
+        result = cursor.fetchone()
+        cursor.close()
+        return result
+    except Exception as e:
+        logger.error(f"Fetch failed: {e}")
+        return None
+
+def fetch_all(self, query: str, params: tuple = ()) -> List[tuple]:
+    """Fetch all rows with connection check"""
+    if not self.connection:
+        logger.error("Database not connected - cannot fetch")
+        return []
+    
+    try:
+        cursor = self.connection.cursor()
+        cursor.execute(query, params)
+        result = cursor.fetchall()
+        cursor.close()
+        return result
+    except Exception as e:
+        logger.error(f"Fetch failed: {e}")
+        return []
 def create_session(attacker_id: int, protocol: str) -> int:
     with get_connection() as conn:
         cursor = conn.cursor()
