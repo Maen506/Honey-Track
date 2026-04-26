@@ -164,7 +164,8 @@ class EnvironmentValidator:
             model_path = Path(os.getenv('ML_MODEL_PATH', 'ml/models'))
             
             if model_path.exists():
-                models = list(model_path.glob('*.joblib'))
+                models = list(model_path.glob('*.pkl'))
+                
                 self.success.append(f"✓ Found {len(models)} ML models")
             else:
                 self.warnings.append(f"⚠️  ML models directory not found: {model_path}")
