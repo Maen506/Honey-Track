@@ -1,0 +1,17 @@
+run = "python main.py"
+language = "python3"
+
+[packager]
+language = "python3"
+ignoredPaths = [".git", "__pycache__", ".pytest_cache"]
+
+[packager.features]
+packageSearch = true
+guessImports = true
+
+[nix]
+channel = "stable-23_11"
+
+[[ports]]
+localPort = 5000
+externalPort = 80

@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HoneyTrack - Honeypot Detection System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            color: #667eea;
+            font-size: 28px;
+        }
+
+        nav {
+            display: flex;
+            gap: 20px;
+        }
+
+        nav button {
+            padding: 10px 20px;
+            border: none;
+            background: #667eea;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.3s;
+        }
+
+        nav button:hover {
+            background: #764ba2;
+        }
+
+        nav button.active {
+            background: #764ba2;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: 0.3s;
+        }
+
+        .card:hover {
+            box-shadow: 0 8px 12px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #764ba2;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            color: #999;
+            font-size: 14px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        table th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        table tr:hover {
+            background: #f5f5f5;
+        }
+
+        .alert-high {
+            background: #fee;
+            border-left: 4px solid #f44;
+        }
+
+        .alert-medium {
+            background: #fef3cd;
+            border-left: 4px solid #ff9800;
+        }
+
+        .alert-low {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background: #efe;
+            color: #3c3;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        button.action-btn {
+            padding: 8px 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            margin: 5px;
+        }
+
+        button.action-btn:hover {
+            background: #764ba2;
+        }
+
+        .refresh-btn {
+            background: #28a745;
+        }
+
+        .refresh-btn:hover {
+            background: #218838;
+        }
+
+        .delete-btn {
+            background: #dc3545;
+        }
+
+        .delete-btn:hover {
+            background: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🍯 HoneyTrack - Attack Detection System</h1>
+            <nav>
+                <button class="nav-btn active" data-page="dashboard">Dashboard</button>
+                <button class="nav-btn" data-page="attacks">Attacks</button>
+                <button class="nav-btn" data-page="alerts">Alerts</button>
+                <button class="nav-btn" data-page="ml-analysis">ML Analysis</button>
+                <button class="nav-btn" data-page="vt-reports">VirusTotal</button>
+                <button class="nav-btn" data-page="settings">Settings</button>
+            </nav>
+        </header>
+
+        <!-- Dashboard Page -->
+        <div id="dashboard" class="page active">
+            <div class="content">
+                <div class="card">
+                    <h2>Total Attacks</h2>
+                    <div class="stat-value" id="total-attacks">0</div>
+                    <div class="stat-label">Detected attacks</div>
+                </div>
+
+                <div class="card">
+                    <h2>Active Attackers</h2>
+                    <div class="stat-value" id="active-attackers">0</div>
+                    <div class="stat-label">Unique IPs</div>
+                </div>
+
+                <div class="card">
+                    <h2>High Risk Alerts</h2>
+                    <div class="stat-value" id="high-risk-alerts">0</div>
+                    <div class="stat-label">Critical threats</div>
+                </div>
+
+                <div class="card">
+                    <h2>System Status</h2>
+                    <div class="stat-value" id="system-status">✓ Online</div>
+                    <div class="stat-label">All systems operational</div>
+                </div>
+
+                <div class="card full-width">
+                    <h2>Recent Attacks</h2>
+                    <button class="action-btn refresh-btn" onclick="loadRecentAttacks()">Refresh</button>
+                    <div id="recent-attacks-container">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+
+                <div class="card full-width">
+                    <h2>Top Attack Types</h2>
+                    <div id="attack-types-container">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attacks Page -->
+        <div id="attacks" class="page">
+            <div class="content full-width">
+                <div class="card full-width">
+                    <h2>All Attacks</h2>
+                    <button class="action-btn refresh-btn" onclick="loadAllAttacks()">Refresh</button>
+                    <div id="all-attacks-container">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerts Page -->
+        <div id="alerts" class="page">
+            <div class="content full-width">
+                <div class="card full-width">
+                    <h2>Security Alerts</h2>
+                    <button class="action-btn refresh-btn" onclick="loadAlerts()">Refresh</button>
+                    <div id="alerts-container">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ML Analysis Page -->
+        <div id="ml-analysis" class="page">
+            <div class="content">
+                <div class="card full-width">
+                    <h2>Machine Learning Analysis</h2>
+                    <button class="action-btn refresh-btn" onclick="loadMLAnalysis()">Refresh</button>
+                    <div id="ml-analysis-container">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VirusTotal Page -->
+        <div id="vt-reports" class="page">
+            <div class="content full-width">
+                <div class="card full-width">
+                    <h2>VirusTotal Reports</h2>
+                    <button class="action-btn refresh-btn" onclick="loadVTReports()">Refresh</button>
+                    <div id="vt-reports-container">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Page -->
+        <div id="settings" class="page">
+            <div class="content">
+                <div class="card full-width">
+                    <h2>System Settings</h2>
+                    <div id="settings-container">
+                        <label>
+                            <input type="checkbox" id="auto-refresh" checked>
+                            Auto-refresh every 10 seconds
+                        </label>
+                        <br><br>
+                        <label>
+                            <input type="checkbox" id="notifications" checked>
+                            Enable notifications
+                        </label>
+                        <br><br>
+                        <button class="action-btn" onclick="saveSettings()">Save Settings</button>
+                        <button class="action-btn refresh-btn" onclick="testConnection()">Test Connection</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let autoRefresh = true;
+
+        // Navigation
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const pageId = e.target.dataset.page;
+                showPage(pageId);
+                
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+            });
+        });
+
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+
+            // Load data for the page
+            if (pageId === 'dashboard') {
+                loadDashboard();
+            } else if (pageId === 'attacks') {
+                loadAllAttacks();
+            } else if (pageId === 'alerts') {
+                loadAlerts();
+            } else if (pageId === 'ml-analysis') {
+                loadMLAnalysis();
+            } else if (pageId === 'vt-reports') {
+                loadVTReports();
+            }
+        }
+
+        // API Calls
+        async function apiCall(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                return null;
+            }
+        }
+
+        async function loadDashboard() {
+            const stats = await apiCall('/stats');
+            if (stats) {
+                document.getElementById('total-attacks').textContent = stats.total_attacks || 0;
+                document.getElementById('active-attackers').textContent = stats.active_attackers || 0;
+                document.getElementById('high-risk-alerts').textContent = stats.high_risk_alerts || 0;
+            }
+
+            loadRecentAttacks();
+            loadAttackTypes();
+        }
+
+        async function loadRecentAttacks() {
+            const data = await apiCall('/attacks?limit=10');
+            const container = document.getElementById('recent-attacks-container');
+            
+            if (!data || data.length === 0) {
+                container.innerHTML = '<p>No attacks detected</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>IP</th><th>Type</th><th>Time</th><th>Status</th></tr></thead><tbody>';
+            data.forEach(attack => {
+                const severity = attack.severity || 'medium';
+                html += `<tr class="alert-${severity}">
+                    <td>${attack.source_ip}</td>
+                    <td>${attack.attack_type}</td>
+                    <td>${new Date(attack.timestamp).toLocaleString()}</td>
+                    <td>${attack.status}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        async function loadAllAttacks() {
+            const data = await apiCall('/attacks');
+            const container = document.getElementById('all-attacks-container');
+            
+            if (!data || data.length === 0) {
+                container.innerHTML = '<p>No attacks found</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>IP</th><th>Type</th><th>Time</th><th>Details</th><th>Action</th></tr></thead><tbody>';
+            data.forEach(attack => {
+                html += `<tr>
+                    <td>${attack.source_ip}</td>
+                    <td>${attack.attack_type}</td>
+                    <td>${new Date(attack.timestamp).toLocaleString()}</td>
+                    <td>${attack.details || 'N/A'}</td>
+                    <td><button class="action-btn delete-btn" onclick="deleteAttack(${attack.id})">Delete</button></td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        async function loadAlerts() {
+            const data = await apiCall('/alerts');
+            const container = document.getElementById('alerts-container');
+            
+            if (!data || data.length === 0) {
+                container.innerHTML = '<p>No alerts</p>';
+                return;
+            }
+
+            let html = '';
+            data.forEach(alert => {
+                const severity = alert.severity || 'medium';
+                html += `<div class="card alert-${severity}">
+                    <h3>${alert.title}</h3>
+                    <p>${alert.message}</p>
+                    <small>${new Date(alert.timestamp).toLocaleString()}</small>
+                </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        async function loadMLAnalysis() {
+            const data = await apiCall('/ml/analysis');
+            const container = document.getElementById('ml-analysis-container');
+            
+            if (!data) {
+                container.innerHTML = '<p>ML analysis not available</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Attack Type</th><th>Confidence</th><th>MITRE Tactic</th></tr></thead><tbody>';
+            if (data.predictions) {
+                data.predictions.forEach(pred => {
+                    html += `<tr>
+                        <td>${pred.type}</td>
+                        <td>${(pred.confidence * 100).toFixed(2)}%</td>
+                        <td>${pred.mitre_tactic || 'N/A'}</td>
+                    </tr>`;
+                });
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        async function loadVTReports() {
+            const data = await apiCall('/vt/reports');
+            const container = document.getElementById('vt-reports-container');
+            
+            if (!data || data.length === 0) {
+                container.innerHTML = '<p>No VirusTotal reports</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>IP</th><th>Malicious</th><th>Suspicious</th><th>Last Scan</th></tr></thead><tbody>';
+            data.forEach(report => {
+                html += `<tr>
+                    <td>${report.ip}</td>
+                    <td>${report.malicious_count || 0}</td>
+                    <td>${report.suspicious_count || 0}</td>
+                    <td>${report.last_scan || 'N/A'}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        async function loadAttackTypes() {
+            const data = await apiCall('/attacks/types');
+            const container = document.getElementById('attack-types-container');
+            
+            if (!data) {
+                container.innerHTML = '<p>No data</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Type</th><th>Count</th></tr></thead><tbody>';
+            Object.entries(data).forEach(([type, count]) => {
+                html += `<tr><td>${type}</td><td>${count}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        async function deleteAttack(id) {
+            if (!confirm('Delete this attack record?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/attacks/${id}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    alert('Attack deleted');
+                    loadAllAttacks();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        function saveSettings() {
+            autoRefresh = document.getElementById('auto-refresh').checked;
+            alert('Settings saved');
+        }
+
+        async function testConnection() {
+            const data = await apiCall('/health');
+            if (data) {
+                alert('✓ Connection successful!\n' + JSON.stringify(data, null, 2));
+            } else {
+                alert('✗ Connection failed');
+            }
+        }
+
+        // Auto-refresh
+        setInterval(() => {
+            if (autoRefresh && document.getElementById('dashboard').classList.contains('active')) {
+                loadDashboard();
+            }
+        }, 10000);
+
+        // Initial load
+        loadDashboard();
+    </script>
+</body>
+</html>
